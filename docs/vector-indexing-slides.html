@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kỹ thuật lập chỉ mục Vector — Day 19</title>
+<style>
+  :root{
+    --bg:#0b1020; --panel:#121a33; --ink:#e8edff; --muted:#9aa7d4;
+    --accent:#6ea8fe; --accent2:#7ef0c0; --warn:#ffd166; --line:#26345f;
+    --code:#0e1530;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+    background:radial-gradient(1200px 700px at 70% -10%,#1b2750,transparent),var(--bg);
+    color:var(--ink); overflow:hidden;
+  }
+  #deck{height:100vh;width:100vw;position:relative}
+  .slide{
+    position:absolute; inset:0; padding:6vh 8vw;
+    display:none; flex-direction:column; justify-content:center;
+    animation:fade .35s ease;
+  }
+  .slide.active{display:flex}
+  @keyframes fade{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  h1{font-size:clamp(28px,4.4vw,56px);line-height:1.08;letter-spacing:-.5px}
+  h2{font-size:clamp(22px,3vw,38px);margin-bottom:18px;color:var(--accent)}
+  h2 .tag{font-size:.5em;color:var(--muted);vertical-align:middle;margin-left:10px;
+    border:1px solid var(--line);padding:3px 9px;border-radius:999px}
+  p,li{font-size:clamp(15px,1.55vw,21px);line-height:1.55;color:var(--ink)}
+  .muted{color:var(--muted)}
+  .sub{color:var(--muted);font-size:clamp(16px,1.8vw,24px);margin-top:14px}
+  ul{margin:8px 0 0 22px}li{margin:7px 0}
+  .grid{display:grid;gap:18px;margin-top:10px}
+  .g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    padding:20px 22px}
+  .card h3{font-size:clamp(17px,1.9vw,24px);margin-bottom:8px;color:var(--accent2)}
+  .pill{display:inline-block;font-size:13px;color:var(--bg);background:var(--accent2);
+    padding:2px 10px;border-radius:999px;font-weight:700;margin-bottom:8px}
+  .pill.warn{background:var(--warn)}.pill.blue{background:var(--accent)}
+  code,.mono{font-family:"JetBrains Mono",Consolas,monospace}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:12px;
+    padding:16px 18px;overflow:auto;font-size:clamp(13px,1.3vw,16px);line-height:1.5;
+    color:#cfe0ff;margin-top:12px}
+  table{width:100%;border-collapse:collapse;margin-top:14px;font-size:clamp(13px,1.45vw,19px)}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
+  th{color:var(--accent);font-weight:600}
+  td .good{color:var(--accent2)}td .bad{color:#ff8b8b}td .mid{color:var(--warn)}
+  .kicker{color:var(--accent2);font-weight:700;letter-spacing:3px;text-transform:uppercase;
+    font-size:14px;margin-bottom:18px}
+  .center{align-items:center;text-align:center}
+  .nav{position:fixed;bottom:18px;right:24px;display:flex;gap:8px;align-items:center;
+    color:var(--muted);font-size:14px;z-index:10}
+  .nav button{background:var(--panel);color:var(--ink);border:1px solid var(--line);
+    border-radius:8px;padding:6px 12px;cursor:pointer;font-size:16px}
+  .nav button:hover{border-color:var(--accent)}
+  .bar{position:fixed;top:0;left:0;height:4px;background:linear-gradient(90deg,var(--accent),var(--accent2));
+    transition:width .3s;z-index:10}
+  .dots{position:fixed;bottom:20px;left:24px;display:flex;gap:6px;z-index:10}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--line)}
+  .dot.on{background:var(--accent)}
+  .ascii{font-family:"JetBrains Mono",Consolas,monospace;white-space:pre;color:var(--accent2);
+    background:var(--code);border:1px solid var(--line);border-radius:12px;padding:18px;
+    font-size:clamp(11px,1.15vw,15px);line-height:1.35;margin-top:12px;overflow:auto}
+  .foot{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);color:var(--muted);
+    font-size:13px;z-index:10}
+  .lead{font-size:clamp(17px,2vw,26px);color:var(--muted);max-width:60ch}
+</style>
+</head>
+<body>
+<div class="bar" id="bar"></div>
+<div id="deck">
+
+  <!-- 1 -->
+  <section class="slide active center">
+    <div class="kicker">Day 19 · Track 2 · Vector + Feature Store</div>
+    <h1>Kỹ thuật lập chỉ mục Vector<br><span style="color:var(--accent)">(Vector Indexing / ANN)</span></h1>
+    <p class="lead" style="margin-top:22px">Từ brute-force đến HNSW: cách đánh đổi giữa
+       <b>tốc độ</b>, <b>độ chính xác (recall)</b> và <b>bộ nhớ</b> để tìm
+       top-k vector gần nhất trong hàng triệu điểm.</p>
+    <p class="muted" style="margin-top:28px">← → để chuyển slide · phím <b>F</b> để fullscreen</p>
+  </section>
+
+  <!-- 2 -->
+  <section class="slide">
+    <h2>Tại sao cần "lập chỉ mục"?</h2>
+    <div class="grid g2">
+      <div>
+        <p>Tìm kiếm vector = tìm <b>k điểm gần nhất</b> (k-NN) với query embedding.</p>
+        <ul>
+          <li><b>Exact k-NN</b> (brute-force): so sánh query với <i>mọi</i> vector → O(N·d).</li>
+          <li>1M vector × 768 chiều = quá chậm cho real-time (P99 &gt; 100ms).</li>
+          <li>Giải pháp: <b>ANN — Approximate Nearest Neighbor</b>. Hy sinh một chút recall
+              để nhanh hơn 10–100×.</li>
+        </ul>
+        <p class="sub">Index = cấu trúc dữ liệu giúp <b>bỏ qua</b> phần lớn vector không liên quan.</p>
+      </div>
+      <div class="card">
+        <span class="pill">Tam giác đánh đổi</span>
+        <div class="ascii">        Recall (chính xác)
+              /\
+             /  \
+            /    \
+           /      \
+   Speed  /________\  Memory
+  (độ trễ)          (RAM/đĩa)
+
+  Mỗi thuật toán = một điểm
+  trong tam giác này.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section class="slide">
+    <h2>Bản đồ các họ thuật toán</h2>
+    <div class="grid g2">
+      <div class="card"><span class="pill blue">1 · Flat</span><h3>Brute-force / Exact</h3>
+        <p>Quét tuyến tính. Recall 100%, không cần "train". Baseline để đo các index khác.</p></div>
+      <div class="card"><span class="pill blue">2 · Tree</span><h3>KD-Tree, Annoy, Ball-Tree</h3>
+        <p>Chia không gian đệ quy. Tốt ở chiều thấp; "lời nguyền số chiều" ở d cao.</p></div>
+      <div class="card"><span class="pill blue">3 · Hashing</span><h3>LSH</h3>
+        <p>Băm vector gần nhau vào cùng bucket. Đơn giản, streaming-friendly.</p></div>
+      <div class="card"><span class="pill blue">4 · Quantization</span><h3>PQ, OPQ, SQ</h3>
+        <p>Nén vector để tiết kiệm RAM. Thường ghép với IVF.</p></div>
+      <div class="card"><span class="pill blue">5 · Inverted</span><h3>IVF (clustering)</h3>
+        <p>Gom cụm, chỉ tìm trong vài cụm gần query.</p></div>
+      <div class="card"><span class="pill blue">6 · Graph</span><h3>HNSW, NSG, DiskANN</h3>
+        <p>Đồ thị "small-world". SOTA về speed/recall — Qdrant dùng cái này.</p></div>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section class="slide">
+    <h2>1 · Flat Index <span class="tag">Brute-force</span></h2>
+    <div class="grid g2">
+      <div>
+        <p>So sánh query với toàn bộ N vector, sắp xếp theo khoảng cách.</p>
+        <ul>
+          <li><span class="good">✔</span> Recall = 100% (ground truth chuẩn).</li>
+          <li><span class="good">✔</span> Không build/train, không tham số tinh chỉnh.</li>
+          <li><span class="bad">✗</span> Chậm tuyến tính: không hợp &gt; vài trăm nghìn vector.</li>
+        </ul>
+        <p class="sub"><b>Dùng khi:</b> N nhỏ (&lt; 50k), cần độ chính xác tuyệt đối, hoặc làm
+          baseline đo recall cho ANN.</p>
+      </div>
+      <div class="card">
+        <span class="pill warn">Độ phức tạp</span>
+        <table>
+          <tr><th>Chỉ số</th><th>Giá trị</th></tr>
+          <tr><td>Query</td><td class="bad">O(N·d)</td></tr>
+          <tr><td>Build</td><td class="good">O(1)</td></tr>
+          <tr><td>Memory</td><td class="mid">O(N·d) — full vector</td></tr>
+          <tr><td>Recall</td><td class="good">100%</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section class="slide">
+    <h2>2 · IVF <span class="tag">Inverted File Index</span></h2>
+    <div class="grid g2">
+      <div>
+        <p>Dùng k-means để chia không gian thành <b>nlist</b> cụm (Voronoi cells).
+           Mỗi vector thuộc về cụm gần nhất.</p>
+        <p><b>Lúc query:</b> chỉ tìm trong <b>nprobe</b> cụm gần query nhất → bỏ qua phần còn lại.</p>
+        <ul>
+          <li><code>nprobe</code> ↑ → recall ↑ nhưng chậm hơn (tham số then chốt).</li>
+          <li>Cần "train" trên dữ liệu mẫu để học các centroid.</li>
+          <li>Biến thể: <b>IVF-PQ</b> (nén) cho dataset tỉ vector.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="ascii">  ┌─────┬─────┬─────┐
+  │  ·  │ ·· ◎│  ·  │   ◎ = query
+  ├─────┼─────┼─────┤   ● = cụm được quét
+  │ ·●· │ ·●· │  ·  │   (nprobe = 2)
+  ├─────┼─────┼─────┤
+  │  ·  │  ·  │  ·  │
+  └─────┴─────┴─────┘
+  nlist cụm → chỉ quét nprobe cụm</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section class="slide">
+    <h2>3 · Product Quantization <span class="tag">PQ — nén vector</span></h2>
+    <div class="grid g2">
+      <div>
+        <p>Cắt vector d-chiều thành <b>m đoạn nhỏ</b>, mỗi đoạn lượng tử hóa thành
+           1 byte (codebook 256 centroid).</p>
+        <ul>
+          <li>768 float32 = 3072 byte → PQ m=96 = <b>96 byte</b> (giảm ~32×).</li>
+          <li>Khoảng cách tính xấp xỉ qua bảng tra (ADC) — rất nhanh.</li>
+          <li><b>OPQ</b>: xoay không gian trước khi nén để giảm sai số.</li>
+          <li><b>SQ</b> (Scalar Quant): float32 → int8, đơn giản hơn, giảm 4×.</li>
+        </ul>
+        <p class="sub">PQ hiếm khi đứng một mình — ghép với IVF (IVF-PQ) hoặc HNSW (HNSW-PQ).</p>
+      </div>
+      <div class="card">
+        <span class="pill">Đánh đổi</span>
+        <p><span class="good">✔</span> Tiết kiệm RAM khổng lồ → chứa tỉ vector trong bộ nhớ.</p>
+        <p><span class="bad">✗</span> Mất mát thông tin → recall giảm; cần <b>re-rank</b> top-k
+           bằng vector gốc để bù lại.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6b -->
+  <section class="slide">
+    <h2>OPQ &amp; IVF-PQ <span class="tag">⭐ combo cho dữ liệu tỉ vector</span></h2>
+    <div class="grid g2">
+      <div class="card">
+        <span class="pill">OPQ — Optimized PQ</span>
+        <h3>Xoay rồi mới nén</h3>
+        <p>PQ giả định các đoạn (sub-vector) độc lập — sai khi các chiều tương quan.
+           OPQ học một ma trận xoay <b>R</b> sao cho sau khi xoay, dữ liệu phân bố
+           đều giữa các đoạn → sai số lượng tử nhỏ hơn.</p>
+        <ul>
+          <li><span class="good">✔</span> Cùng số byte, recall cao hơn PQ thường.</li>
+          <li>Chỉ tốn thêm 1 phép nhân ma trận lúc encode/query.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <span class="pill blue">IVF-PQ — gom cụm + nén</span>
+        <h3>IVF chọn vùng · PQ nén vector</h3>
+        <p><b>IVF</b> giới hạn tìm kiếm trong <code>nprobe</code> cụm;
+           <b>PQ</b> nén vector trong cụm xuống vài byte → vừa nhanh vừa nhẹ RAM.</p>
+        <ul>
+          <li>Pipeline FAISS kinh điển: <code>OPQ → IVF → PQ</code>.</li>
+          <li>Lưu <b>residual</b> (vector − centroid) rồi mới PQ → chính xác hơn.</li>
+          <li>Re-rank top-k bằng vector gốc để bù mất mát.</li>
+        </ul>
+      </div>
+    </div>
+    <pre><span class="muted"># FAISS — factory string gói cả 3 kỹ thuật</span>
+index = faiss.index_factory(384, "OPQ96,IVF4096,PQ96")
+<span class="muted">#                            └OPQ┘ └─IVF─┘ └PQ┘</span>
+index.train(xb); index.add(xb)
+index.nprobe = 16            <span class="muted"># số cụm quét lúc query (recall ↔ tốc độ)</span></pre>
+  </section>
+
+  <!-- 7 -->
+  <section class="slide">
+    <h2>4 · LSH <span class="tag">Locality-Sensitive Hashing</span></h2>
+    <div class="grid g2">
+      <div>
+        <p>Thiết kế hàm băm sao cho vector <b>gần nhau</b> có xác suất cao rơi vào
+           <b>cùng bucket</b>.</p>
+        <ul>
+          <li>Query → băm → chỉ so sánh các vector cùng bucket.</li>
+          <li>Dùng nhiều bảng băm (L tables) để tăng recall.</li>
+          <li><span class="good">✔</span> Streaming/insert dễ, lý thuyết đảm bảo rõ ràng.</li>
+          <li><span class="bad">✗</span> Thường thua HNSW/IVF về recall-vs-speed thực tế
+              → ít dùng làm index chính ngày nay.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="ascii">  vector ──► [ h1 h2 h3 ] ──► bucket id
+       gần nhau → cùng mã băm
+
+  bucket A: ● ● ●   ◄ query rơi vào đây
+  bucket B: ● ●        → chỉ quét A
+  bucket C: ● ● ● ●</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8 -->
+  <section class="slide">
+    <h2>5 · Tree-based <span class="tag">Annoy / KD-Tree</span></h2>
+    <div class="grid g2">
+      <div>
+        <p>Chia nhỏ không gian bằng siêu phẳng (Annoy: chia ngẫu nhiên), tạo nhiều
+           cây → query đi xuống lá.</p>
+        <ul>
+          <li><b>Annoy</b> (Spotify): forest of random projection trees, file mmap, đọc từ đĩa tốt.</li>
+          <li><span class="good">✔</span> Build nhanh, index bất biến dễ share giữa process.</li>
+          <li><span class="bad">✗</span> "Curse of dimensionality": ở d cao (&gt;100) hiệu quả giảm,
+              khó update incremental.</li>
+        </ul>
+        <p class="sub">Phổ biến trong recommender; HNSW thường thắng cho semantic search.</p>
+      </div>
+      <div class="card">
+        <div class="ascii">         [root]
+         /    \
+     plane    plane
+      / \      / \
+    ▢   ▢    ▢   [●●●]  ◄ lá chứa
+                        candidate
+   nhiều cây → gộp kết quả</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9 -->
+  <section class="slide">
+    <h2>6 · HNSW <span class="tag">⭐ Qdrant dùng mặc định</span></h2>
+    <div class="grid g2">
+      <div>
+        <p><b>Hierarchical Navigable Small World</b> — đồ thị nhiều tầng. Tầng trên thưa
+           (nhảy xa), tầng dưới dày (tinh chỉnh). Greedy search từ trên xuống.</p>
+        <ul>
+          <li><span class="good">✔</span> SOTA: recall cao + latency thấp, không cần train.</li>
+          <li><span class="good">✔</span> Insert động (thêm vector không build lại).</li>
+          <li><span class="bad">✗</span> Ngốn RAM (lưu graph + vector); build chậm hơn IVF.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="ascii">L2:  ◎───────────●            (thưa)
+      \         /
+L1:  ◎──●────●──●──●        (vừa)
+      \  \   /  /
+L0: ●─●─●─●─●─●─●─●─●─●     (đầy đủ)
+    bắt đầu tầng cao → tụt dần → top-k</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10 -->
+  <section class="slide">
+    <h2>HNSW — 3 tham số phải nhớ</h2>
+    <table>
+      <tr><th>Tham số</th><th>Ý nghĩa</th><th>Tăng lên thì…</th></tr>
+      <tr><td class="mono">m</td><td>Số cạnh / node (bậc đồ thị)</td>
+        <td><span class="good">recall ↑</span>, RAM ↑, build chậm</td></tr>
+      <tr><td class="mono">ef_construct</td><td>Độ rộng tìm kiếm lúc <b>build</b></td>
+        <td><span class="good">chất lượng graph ↑</span>, build chậm</td></tr>
+      <tr><td class="mono">ef (hnsw_ef)</td><td>Độ rộng tìm kiếm lúc <b>query</b></td>
+        <td><span class="good">recall ↑</span>, latency ↑</td></tr>
+    </table>
+    <pre><span class="muted"># Qdrant — cấu hình HNSW khi tạo collection</span>
+from qdrant_client.models import VectorParams, Distance, HnswConfigDiff
+
+client.create_collection(
+    "docs",
+    vectors_config=VectorParams(size=384, distance=Distance.COSINE),
+    hnsw_config=HnswConfigDiff(m=16, ef_construct=100),  <span class="muted"># build-time</span>
+)
+<span class="muted"># query-time: chỉnh ef để đổi recall ↔ tốc độ</span>
+client.search("docs", query_vector=q, limit=10,
+              search_params={"hnsw_ef": 128})</pre>
+  </section>
+
+  <!-- 11 -->
+  <section class="slide">
+    <h2>So sánh nhanh các index</h2>
+    <table>
+      <tr><th>Thuật toán</th><th>Recall</th><th>Tốc độ query</th><th>RAM</th><th>Insert động</th><th>Train?</th></tr>
+      <tr><td>Flat (brute)</td><td class="good">100%</td><td class="bad">chậm</td><td class="mid">cao</td><td class="good">có</td><td class="good">không</td></tr>
+      <tr><td>IVF</td><td class="mid">tốt</td><td class="good">nhanh</td><td class="mid">vừa</td><td class="mid">khó</td><td class="bad">có</td></tr>
+      <tr><td>IVF-PQ</td><td class="mid">khá</td><td class="good">rất nhanh</td><td class="good">rất thấp</td><td class="mid">khó</td><td class="bad">có</td></tr>
+      <tr><td>LSH</td><td class="bad">vừa</td><td class="mid">vừa</td><td class="mid">vừa</td><td class="good">dễ</td><td class="good">không</td></tr>
+      <tr><td>Annoy</td><td class="mid">khá</td><td class="good">nhanh</td><td class="good">thấp(mmap)</td><td class="bad">không</td><td class="mid">build</td></tr>
+      <tr><td><b>HNSW</b></td><td class="good">rất cao</td><td class="good">rất nhanh</td><td class="bad">cao</td><td class="good">có</td><td class="good">không</td></tr>
+      <tr><td>DiskANN</td><td class="good">cao</td><td class="mid">nhanh(SSD)</td><td class="good">thấp(đĩa)</td><td class="mid">vừa</td><td class="mid">build</td></tr>
+    </table>
+    <p class="sub">Không có "tốt nhất" tuyệt đối — chọn theo ràng buộc <b>RAM ↔ recall ↔ latency</b> của bạn.</p>
+  </section>
+
+  <!-- 12 -->
+  <section class="slide">
+    <h2>Chọn index thế nào? <span class="tag">Cây quyết định</span></h2>
+    <div class="ascii">  N < 50k ?  ───── có ──►  Flat (exact, recall 100%)
+     │ không
+     ▼
+  RAM thoải mái & cần recall cao?  ── có ──►  HNSW  ⭐ (mặc định nên chọn)
+     │ không
+     ▼
+  Dataset cực lớn (tỉ vector), RAM hạn chế?  ── có ──►  IVF-PQ / DiskANN
+     │ không
+     ▼
+  Cần insert streaming đơn giản?  ── có ──►  LSH / IVF</div>
+    <p class="sub">Qdrant (lab này) mặc định <b>HNSW</b>; có thể bật quantization (SQ/PQ) để giảm RAM,
+       và <code>indexing_threshold</code> để hoãn build trên collection nhỏ.</p>
+  </section>
+
+  <!-- 13 -->
+  <section class="slide">
+    <h2>Liên hệ Lab Day 19 <span class="tag">Qdrant + fastembed</span></h2>
+    <div class="grid g2">
+      <div>
+        <ul>
+          <li><b>Embedding:</b> fastembed (bge-small, 384-d) → vector.</li>
+          <li><b>Index:</b> Qdrant tự dựng <b>HNSW</b> mỗi collection.</li>
+          <li><b>Hybrid search:</b> dense (HNSW) + sparse/BM25 → fuse.</li>
+          <li><b>Đo lường:</b> <code>make benchmark</code> → Precision@10 &amp; P99 latency
+              — chính là đo recall/tốc độ của index.</li>
+        </ul>
+        <p class="sub">Thử nghiệm: đổi <code>hnsw_ef</code> và xem Precision@10 ↔ P99 thay đổi ra sao.</p>
+      </div>
+      <div class="card">
+        <span class="pill">Việc cần làm</span>
+        <ul>
+          <li>Tăng <code>ef</code> → recall lên, latency lên bao nhiêu?</li>
+          <li>Bật quantization → RAM giảm, recall mất bao nhiêu?</li>
+          <li>So Flat vs HNSW trên cùng tập truy vấn.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 14 -->
+  <section class="slide center">
+    <div class="kicker">Tóm tắt</div>
+    <h1>Index = đánh đổi có chủ đích</h1>
+    <p class="lead" style="margin-top:22px">
+      <b style="color:var(--accent2)">Flat</b> cho đúng tuyệt đối ·
+      <b style="color:var(--accent2)">IVF/PQ</b> cho quy mô &amp; RAM ·
+      <b style="color:var(--accent2)">HNSW</b> cho cân bằng tốt nhất.</p>
+    <p class="sub" style="margin-top:26px">Hiểu 3 trục <b>Recall — Speed — Memory</b>,
+      rồi tinh chỉnh tham số (nprobe / ef / m) theo SLA của bạn.</p>
+    <p class="muted" style="margin-top:30px">Cảm ơn · Day 19 · Vector + Feature Store Lab</p>
+  </section>
+
+</div>
+
+<div class="dots" id="dots"></div>
+<div class="foot" id="foot"></div>
+<div class="nav">
+  <button onclick="go(-1)">‹</button>
+  <span id="counter">1 / 14</span>
+  <button onclick="go(1)">›</button>
+</div>
+
+<script>
+  const slides=[...document.querySelectorAll('.slide')];
+  const dots=document.getElementById('dots');
+  let i=0;
+  slides.forEach((_,n)=>{const d=document.createElement('div');d.className='dot';
+    d.onclick=()=>show(n);dots.appendChild(d);});
+  function show(n){
+    i=Math.max(0,Math.min(slides.length-1,n));
+    slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+    [...dots.children].forEach((d,k)=>d.classList.toggle('on',k===i));
+    document.getElementById('counter').textContent=(i+1)+' / '+slides.length;
+    document.getElementById('bar').style.width=((i+1)/slides.length*100)+'%';
+    document.getElementById('foot').textContent='Kỹ thuật lập chỉ mục Vector — slide '+(i+1);
+  }
+  function go(d){show(i+d)}
+  document.addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown')go(1);
+    if(e.key==='ArrowLeft'||e.key==='PageUp')go(-1);
+    if(e.key==='Home')show(0);if(e.key==='End')show(slides.length-1);
+    if(e.key==='f'||e.key==='F'){if(!document.fullscreenElement)
+      document.documentElement.requestFullscreen();else document.exitFullscreen();}
+  });
+  show(0);
+</script>
+</body>
+</html>
