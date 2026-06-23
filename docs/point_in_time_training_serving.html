@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Point‑in‑time vs Training–Serving Skew</title>
+  <link rel="stylesheet" href="https://unpkg.com/reveal.js/dist/reveal.css">
+  <link rel="stylesheet" href="https://unpkg.com/reveal.js/dist/theme/black.css" id="theme">
+  <style>
+    /* Small tweaks for readability */
+    .reveal .slides section h2 { font-size: 2.2rem; }
+    .reveal .slides section p, .reveal .slides section li { font-size: 1.05rem; }
+  </style>
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+      <section>
+        <h1>Point‑in‑time &amp; Training–Serving Skew</h1>
+        <p>Đặc điểm, ví dụ và cách phòng tránh</p>
+        <p style="opacity:.7; margin-top:1.2rem;">Slide ngắn — phù hợp cho bài thuyết trình kỹ thuật</p>
+      </section>
+
+      <section>
+        <h2>Nội dung</h2>
+        <ul>
+          <li>Định nghĩa "point‑in‑time"</li>
+          <li>Đặc điểm cần lưu ý</li>
+          <li>Định nghĩa Training–Serving Skew</li>
+          <li>Ví dụ &amp; cách phòng tránh</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Point‑in‑time — Định nghĩa</h2>
+        <p>Point‑in‑time thiết lập ngữ cảnh của dữ liệu tại một thời điểm cụ thể để đảm bảo rằng thông tin huấn luyện chỉ sử dụng những dữ liệu có sẵn tại "thời điểm" dự đoán thực tế.</p>
+      </section>
+
+      <section>
+        <h2>Point‑in‑time — Đặc điểm chính</h2>
+        <ul>
+          <li>Loại trừ dữ liệu tương lai (no future leakage)</li>
+          <li>Giữ đúng trạng thái tính sẵn có của feature tại thời điểm dự đoán</li>
+          <li>Đòi hỏi timestamp chính xác &amp; hệ thống replay dữ liệu</li>
+          <li>Thường dùng khi xây dựng backtest, đánh giá mô hình theo thời gian</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Training–Serving Skew — Định nghĩa</h2>
+        <p>Sự khác biệt giữa dữ liệu hoặc pipeline khi huấn luyện (training) và khi triển khai phục vụ (serving). Skew dẫn tới hiệu năng kém trên môi trường production.</p>
+      </section>
+
+      <section>
+        <h2>Types of Skew (Loại skew phổ biến)</h2>
+        <ul>
+          <li><b>Feature availability skew:</b> feature có trong training nhưng không có khi serving</li>
+          <li><b>Preprocessing skew:</b> khác biệt transform/encoding giữa train &amp; serve</li>
+          <li><b>Temporal/data drift:</b> phân phối thay đổi theo thời gian</li>
+          <li><b>Label leakage / target leakage:</b> thông tin rò rỉ từ tương lai vào training</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Ví dụ thực tế</h2>
+        <ul>
+          <li>Feature timestamped: dùng field "last_purchase_time" nhưng ở serving chỉ có "last_purchase_day" → mất độ phân giải</li>
+          <li>Huấn luyện dùng batch job enrich từ external API, nhưng serving không gọi API đó → feature missing</li>
+          <li>Preprocessor: ở training dùng sklearn LabelEncoder fitted trên toàn bộ dữ liệu, ở serving dùng mã mới dẫn tới mapping khác nhau</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Cách phòng tránh — Point‑in‑time</h2>
+        <ul>
+          <li>Lưu snapshot dữ liệu hoặc dùng event sourcing để replay trong backtest</li>
+          <li>Đánh dấu rõ "availability timestamp" cho mỗi feature</li>
+          <li>Kiểm thử backtest với dữ liệu tương tác giống production</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Cách phòng tránh — Training–Serving Skew</h2>
+        <ul>
+          <li>Đồng bộ code preprocess giữa train &amp; serve (shared library)</li>
+          <li>Giữ contract rõ ràng cho feature store với guarantees về độ trễ và sẵn có</li>
+          <li>Thực hiện validation checks: feature presence, value ranges, cardinality
+          </li>
+          <li>Monitor model inputs &amp; outputs, alert khi drift/significant skew</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Checklist nhanh trước deploy</h2>
+        <ul>
+          <li>Đã kiểm tra point‑in‑time cho mọi feature?</li>
+          <li>Shared preprocessing được đóng gói và dùng cả hai môi trường?</li>
+          <li>Monitoring &amp; alert cho input drift đã bật?</li>
+          <li>Fallback/default value khi feature missing được định nghĩa?</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Kết luận</h2>
+        <p>Point‑in‑time và training–serving skew là 2 khái niệm khác nhau nhưng liên quan mật thiết. Làm tốt point‑in‑time và đồng bộ pipeline sẽ giảm nhiều vấn đề production.</p>
+      </section>
+
+      <section>
+        <h2>Tài liệu tham khảo &amp; Tài nguyên</h2>
+        <ul>
+          <li>Feast: feature store patterns</li>
+          <li>Google papers on leakage &amp; evaluation</li>
+          <li>Best practices: shared transform libraries, feature contracts</li>
+        </ul>
+        <p style="opacity:.7; margin-top:1rem;">Mở file này trong trình duyệt để trình chiếu: mở <strong>docs/point_in_time_training_serving.html</strong></p>
+      </section>
+
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/reveal.js/dist/reveal.js"></script>
+  <script>
+    Reveal.initialize({
+      hash: true,
+      slideNumber: true,
+      transition: 'convex'
+    });
+  </script>
+</body>
+</html>

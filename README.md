@@ -1,4 +1,4 @@
-# Day 19 — Vector Store + Feature Store Lab (Track 2)
+-# Day 19 — Vector Store + Feature Store Lab (Track 2)
 
 Lab cho **AICB-P2T2 · Ngày 19 · Vector Store + Feature Store**.
 Build hybrid search API + Feast feature store hoàn chỉnh, đo Precision@10 và P99 latency.
