@@ -183,9 +183,15 @@ else:
 
 # %%
 import pandas as pd
+# Each user's profile row was emitted at NOW - (i hours): u_001 @ NOW-1h,
+# u_002 @ NOW-2h, u_003 @ NOW-3h (see make_user_profile, hours=i%48). For a valid
+# point-in-time match the query timestamp must be AT or AFTER the feature's
+# timestamp — querying before it (the "future feature" case) correctly returns
+# null and drops the row. We stagger the query times to stay after each user's
+# feature event so all 3 entities resolve.
 entity_df = pd.DataFrame({
     "user_id": ["u_001", "u_002", "u_003"],
-    "event_timestamp": [NOW - timedelta(hours=2), NOW - timedelta(hours=1), NOW],
+    "event_timestamp": [NOW, NOW - timedelta(hours=1), NOW - timedelta(hours=2)],
 })
 
 historical = fs.get_historical_features(
